@@ -27,6 +27,7 @@ public struct UpdateCommand: CommandProtocol {
 				directoryPath: checkoutOptions.directoryPath,
 				logPath: logPath,
 				archive: false,
+                pattern: checkoutOptions.pattern,
 				dependenciesToBuild: dependenciesToUpdate
 			)
 		}

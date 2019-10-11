@@ -23,6 +23,7 @@ extension BuildOptions: OptionsProtocol {
 			<*> mode <| Option<String?>(key: "derived-data", defaultValue: nil, usage: "path to the custom derived data folder")
 			<*> mode <| Option(key: "cache-builds", defaultValue: false, usage: "use cached builds when possible")
 			<*> mode <| Option(key: "use-binaries", defaultValue: true, usage: "don't use downloaded binaries when possible")
+            <*> (mode <| Option<String?>(key: "schemes", defaultValue: nil, usage: "schemes to build")).flatMap { Result.success($0?.components(separatedBy: ",")) }
 	}
 }
 
@@ -36,7 +37,9 @@ public struct BuildCommand: CommandProtocol {
 		public let directoryPath: String
 		public let logPath: String?
 		public let archive: Bool
+        public let pattern: CartfilePattern
 		public let dependenciesToBuild: [String]?
+        
 
 		/// If `archive` is true, this will be a producer that will archive
 		/// the project after the build.
@@ -60,6 +63,7 @@ public struct BuildCommand: CommandProtocol {
 				<*> mode <| Option(key: "project-directory", defaultValue: FileManager.default.currentDirectoryPath, usage: "the directory containing the Carthage project")
 				<*> mode <| Option(key: "log-path", defaultValue: nil, usage: "path to the xcode build output. A temporary file is used by default")
 				<*> mode <| Option(key: "archive", defaultValue: false, usage: "archive built frameworks from the current project (implies --no-skip-current)")
+                <*> mode <| Option(key: "cartfile", defaultValue: Constants.Project.cartfilePath1, usage: "the directory containing the Carthage project")
 				<*> (mode <| Argument(defaultValue: [], usage: "the dependency names to build", usageParameter: "dependency names")).map { $0.isEmpty ? nil : $0 }
 		}
 	}
@@ -125,7 +129,7 @@ public struct BuildCommand: CommandProtocol {
 	private func buildProjectInDirectoryURL(_ directoryURL: URL, options: Options) -> BuildSchemeProducer {
 		let shouldBuildCurrentProject =  !options.skipCurrent || options.archive
 
-		let project = Project(directoryURL: directoryURL)
+        let project = Project(directoryURL: directoryURL, pattern: options.pattern)
 		var eventSink = ProjectEventSink(colorOptions: options.colorOptions)
 		project.projectEvents.observeValues { eventSink.put($0) }
 

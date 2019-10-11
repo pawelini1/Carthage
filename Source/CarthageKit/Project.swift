@@ -82,20 +82,38 @@ extension ProjectEvent: Equatable {
 	}
 }
 
+public typealias CartfilePattern = String
+
+extension CartfilePattern {
+    public func privateCartfilePath() -> String { return "\(self).private" }
+    public func resolvedCartfilePath() -> String { return "\(self).resolved" }
+}
+
+extension CartfilePattern: Scannable {
+    public static func from(_ scanner: Scanner) -> Result<CartfilePattern, ScannableError> {
+        if !scanner.scanString("cartfile:\"", into: nil) {
+            return .success(Constants.Project.cartfilePath1)
+        }
+        
+        var pattern: NSString?
+        if !scanner.scanUpTo("\"", into: &pattern) || pattern == nil {
+            return .failure(ScannableError(message: "empty cartfile name", currentLine: scanner.currentLine))
+        }
+        
+        if !scanner.scanString("\"", into: nil) {
+            return .failure(ScannableError(message: "unterminated cartfile name", currentLine: scanner.currentLine))
+        }
+        
+        return .success(self.init(pattern! as String))
+    }
+}
+
 /// Represents a project that is using Carthage.
 public final class Project { // swiftlint:disable:this type_body_length
 	/// File URL to the root directory of the project.
 	public let directoryURL: URL
-
-	/// The file URL to the project's Cartfile.
-	public var cartfileURL: URL {
-		return directoryURL.appendingPathComponent(Constants.Project.cartfilePath, isDirectory: false)
-	}
-
-	/// The file URL to the project's Cartfile.resolved.
-	public var resolvedCartfileURL: URL {
-		return directoryURL.appendingPathComponent(Constants.Project.resolvedCartfilePath, isDirectory: false)
-	}
+    
+    public let pattern: CartfilePattern
 
 	/// Whether to prefer HTTPS for cloning (vs. SSH).
 	public var preferHTTPS = true
@@ -109,7 +127,7 @@ public final class Project { // swiftlint:disable:this type_body_length
 	public let projectEvents: Signal<ProjectEvent, NoError>
 	private let _projectEventsObserver: Signal<ProjectEvent, NoError>.Observer
 
-	public init(directoryURL: URL) {
+	public init(directoryURL: URL, pattern: CartfilePattern) {
 		precondition(directoryURL.isFileURL)
 
 		let (signal, observer) = Signal<ProjectEvent, NoError>.pipe()
@@ -117,6 +135,7 @@ public final class Project { // swiftlint:disable:this type_body_length
 		_projectEventsObserver = observer
 
 		self.directoryURL = directoryURL
+        self.pattern = pattern
 	}
 
 	private typealias CachedVersions = [Dependency: [PinnedVersion]]
@@ -134,11 +153,26 @@ public final class Project { // swiftlint:disable:this type_body_length
 	private lazy var xcodeVersionDirectory: String = XcodeVersion.make()
 		.map { "\($0.version)_\($0.buildVersion)" } ?? "Unknown"
 
+    /// The file URL to the project's Cartfile.
+    public var cartfileURL: URL {
+        return directoryURL.appendingPathComponent(pattern, isDirectory: false)
+    }
+    
+    /// The file URL to the project's Cartfile.resolved.
+    public var resolvedCartfileURL: URL {
+        return directoryURL.appendingPathComponent(pattern.resolvedCartfilePath(), isDirectory: false)
+    }
+    
+    /// The file URL to the project's Cartfile.private.
+    public var privateCartfileURL: URL {
+        return directoryURL.appendingPathComponent(pattern.privateCartfilePath(), isDirectory: false)
+    }
+    
 	/// Attempts to load Cartfile or Cartfile.private from the given directory,
 	/// merging their dependencies.
 	public func loadCombinedCartfile() -> SignalProducer<Cartfile, CarthageError> {
-		let cartfileURL = directoryURL.appendingPathComponent(Constants.Project.cartfilePath, isDirectory: false)
-		let privateCartfileURL = directoryURL.appendingPathComponent(Constants.Project.privateCartfilePath, isDirectory: false)
+		let cartfileURL = self.cartfileURL
+		let privateCartfileURL = self.privateCartfileURL
 
 		func isNoSuchFileError(_ error: CarthageError) -> Bool {
 			switch error {
@@ -175,11 +209,12 @@ public final class Project { // swiftlint:disable:this type_body_length
 		return SignalProducer.zip(cartfile, privateCartfile)
 			.attemptMap { cartfile, privateCartfile -> Result<Cartfile, CarthageError> in
 				var cartfile = cartfile
+                let pattern = self.pattern
 
 				let duplicateDeps = duplicateDependenciesIn(cartfile, privateCartfile).map { dependency in
 					return DuplicateDependency(
 						dependency: dependency,
-						locations: ["\(Constants.Project.cartfilePath)", "\(Constants.Project.privateCartfilePath)"]
+						locations: ["\(pattern)", "\(pattern.privateCartfilePath())"]
 					)
 				}
 
@@ -322,7 +357,7 @@ public final class Project { // swiftlint:disable:this type_body_length
 			let revision = version.commitish
 			let cartfileFetch: SignalProducer<Cartfile, CarthageError> = self.cloneOrFetchDependency(dependency, commitish: revision)
 				.flatMap(.concat) { repositoryURL in
-					return contentsOfFileInRepository(repositoryURL, Constants.Project.cartfilePath, revision: revision)
+					return contentsOfFileInRepository(repositoryURL, Constants.Project.cartfilePath1, revision: revision)
 				}
 				.flatMapError { _ in .empty }
 				.attemptMap(Cartfile.from(string:))
@@ -336,7 +371,7 @@ public final class Project { // swiftlint:disable:this type_body_length
 				}
 				.flatMap(.concat) { directoryExists -> SignalProducer<Cartfile, CarthageError> in
 					if directoryExists {
-						return SignalProducer(result: Cartfile.from(file: dependencyURL.appendingPathComponent(Constants.Project.cartfilePath)))
+						return SignalProducer(result: Cartfile.from(file: dependencyURL.appendingPathComponent(Constants.Project.cartfilePath1)))
 							.flatMapError { _ in .empty }
 					} else {
 						return cartfileFetch
@@ -711,7 +746,7 @@ public final class Project { // swiftlint:disable:this type_body_length
 	/// Sends a boolean indicating whether binaries were installed.
 	private func installBinaries(for dependency: Dependency, pinnedVersion: PinnedVersion, toolchain: String?) -> SignalProducer<Bool, CarthageError> {
 		switch dependency {
-		case let .gitHub(server, repository):
+		case let .gitHub(server, repository, _):
 			let client = Client(server: server)
 			return self.downloadMatchingBinaries(for: dependency, pinnedVersion: pinnedVersion, fromRepository: repository, client: client)
 				.flatMapError { error -> SignalProducer<URL, CarthageError> in
@@ -879,7 +914,7 @@ public final class Project { // swiftlint:disable:this type_body_length
 						submodulesInRepository(repositoryURL, revision: revision)
 							.flatMap(.concat) { (submodule) in
 								return cloneSubmoduleInWorkingDirectory(submodule, workingDirectoryURL, cacheURLMap: { (gitURL: GitURL) in
-									let dependency = Dependency.git(gitURL)
+                                    let dependency = Dependency.git(gitURL, Constants.Project.cartfilePath1)
 									return repositoryFileURL(for: dependency)
 								})
 							}
@@ -952,7 +987,7 @@ public final class Project { // swiftlint:disable:this type_body_length
 					.url(for: dependency, rootDirectoryURL: self.directoryURL)
 					.resolvingSymlinksInPath()
 
-				let frameworkURLs = buildableSchemesInDirectory(checkoutURL, withConfiguration: "Release")
+                let frameworkURLs = buildableSchemesInDirectory(checkoutURL, withConfiguration: "Release", forSchemes: nil)
 					.flatMap(.concurrent(limit: 4)) { scheme, project -> SignalProducer<BuildSettings, CarthageError> in
 						let buildArguments = BuildArguments(project: project, scheme: scheme, configuration: "Release")
 						return BuildSettings.load(with: buildArguments)

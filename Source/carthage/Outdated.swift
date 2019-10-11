@@ -53,6 +53,7 @@ public struct OutdatedCommand: CommandProtocol {
 		public let outputXcodeWarnings: Bool
 		public let colorOptions: ColorOptions
 		public let directoryPath: String
+        public let pattern: CartfilePattern
 
 		public static func evaluate(_ mode: CommandMode) -> Result<Options, CommandantError<CarthageError>> {
 			let projectDirectoryOption = Option(
@@ -67,13 +68,14 @@ public struct OutdatedCommand: CommandProtocol {
 				<*> mode <| Option(key: "xcode-warnings", defaultValue: false, usage: "output Xcode compatible warning messages")
 				<*> ColorOptions.evaluate(mode, additionalUsage: UpdateType.legend)
 				<*> mode <| projectDirectoryOption
+                <*> mode <| Option(key: "cartfile", defaultValue: Constants.Project.cartfilePath1, usage: "the directory containing the Carthage project")
 		}
 
 		/// Attempts to load the project referenced by the options, and configure it
 		/// accordingly.
 		public func loadProject() -> SignalProducer<Project, CarthageError> {
 			let directoryURL = URL(fileURLWithPath: self.directoryPath, isDirectory: true)
-			let project = Project(directoryURL: directoryURL)
+            let project = Project(directoryURL: directoryURL, pattern: pattern)
 			project.preferHTTPS = !self.useSSH
 
 			var eventSink = ProjectEventSink(colorOptions: colorOptions)

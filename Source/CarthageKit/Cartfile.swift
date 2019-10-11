@@ -15,12 +15,6 @@ public struct Cartfile {
 		self.dependencies = dependencies
 	}
 
-	/// Returns the location where Cartfile should exist within the given
-	/// directory.
-	public static func url(in directoryURL: URL) -> URL {
-		return directoryURL.appendingPathComponent("Cartfile")
-	}
-
 	/// Attempts to parse Cartfile information from a string.
 	public static func from(string: String) -> Result<Cartfile, CarthageError> {
 		var dependencies: [Dependency: VersionSpecifier] = [:]
@@ -54,7 +48,7 @@ public struct Cartfile {
 			)
 
 			switch Dependency.from(scannerWithoutComments).fanout(VersionSpecifier.from(scannerWithoutComments)) {
-			case let .success((dependency, version)):
+			case let .success(dependency, version):
 				if case .binary = dependency, case .gitReference = version {
 					result = .failure(
 						CarthageError.parseError(
@@ -133,12 +127,6 @@ public struct ResolvedCartfile {
 
 	public init(dependencies: [Dependency: PinnedVersion]) {
 		self.dependencies = dependencies
-	}
-
-	/// Returns the location where Cartfile.resolved should exist within the given
-	/// directory.
-	public static func url(in directoryURL: URL) -> URL {
-		return directoryURL.appendingPathComponent("Cartfile.resolved")
 	}
 
 	/// Attempts to parse Cartfile.resolved information from a string.

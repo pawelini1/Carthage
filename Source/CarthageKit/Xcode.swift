@@ -166,7 +166,8 @@ public func xcodebuildTask(_ task: String, _ buildArguments: BuildArguments) -> 
 public func buildableSchemesInDirectory( // swiftlint:disable:this function_body_length
 	_ directoryURL: URL,
 	withConfiguration configuration: String,
-	forPlatforms platforms: Set<Platform> = []
+	forPlatforms platforms: Set<Platform> = [],
+    forSchemes buildSchemes: [String]?
 ) -> SignalProducer<(Scheme, ProjectLocator), CarthageError> {
 	precondition(directoryURL.isFileURL)
 	let locator = ProjectLocator
@@ -199,7 +200,7 @@ public func buildableSchemesInDirectory( // swiftlint:disable:this function_body
 			/// check.
 			let buildArguments = BuildArguments(project: project, scheme: scheme, configuration: configuration)
 			return shouldBuildScheme(buildArguments, platforms)
-				.filter { $0 }
+				.filter { $0 && (buildSchemes?.contains(scheme.name) ?? true) }
 				.map { _ in (scheme, project) }
 		}
 		.flatMap(.concurrent(limit: 4)) { scheme, project -> SignalProducer<(Scheme, ProjectLocator), CarthageError> in
@@ -213,7 +214,7 @@ public func buildableSchemesInDirectory( // swiftlint:disable:this function_body
 					case .workspace where schemes.contains(scheme):
 						let buildArguments = BuildArguments(project: project, scheme: scheme, configuration: configuration)
 						return shouldBuildScheme(buildArguments, platforms)
-							.filter { $0 }
+                            .filter { $0 && (buildSchemes?.contains(scheme.name) ?? true) }
 							.map { _ in project }
 
 					default:
@@ -231,7 +232,7 @@ public func buildableSchemesInDirectory( // swiftlint:disable:this function_body
 			if !schemes.isEmpty {
 				return .init(schemes)
 			} else {
-				return .init(error: .noSharedFrameworkSchemes(.git(GitURL(directoryURL.path)), platforms))
+				return .init(error: .noSharedFrameworkSchemes(.git(GitURL(directoryURL.path), Constants.Project.cartfilePath1), platforms))
 			}
 		}
 }
@@ -881,8 +882,8 @@ public func build(
 			case let (_, .noSharedFrameworkSchemes(_, platforms)):
 				return .noSharedFrameworkSchemes(dependency, platforms)
 
-			case let (.gitHub(repo), .noSharedSchemes(project, _)):
-				return .noSharedSchemes(project, repo)
+			case let (.gitHub(server, repo, _), .noSharedSchemes(project, _)):
+				return .noSharedSchemes(project, (server, repo))
 
 			default:
 				return error
@@ -907,7 +908,8 @@ public func buildInDirectory( // swiftlint:disable:this function_body_length
 		// multiple times.
 		buildableSchemesInDirectory(directoryURL,
 									withConfiguration: options.configuration,
-									forPlatforms: options.platforms
+                                    forPlatforms: options.platforms,
+                                    forSchemes: options.schemes
 			)
 			.flatMap(.concat) { (scheme: Scheme, project: ProjectLocator) -> SignalProducer<TaskEvent<URL>, CarthageError> in
 				let initialValue = (project, scheme)

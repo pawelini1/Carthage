@@ -23,10 +23,10 @@ public struct BinaryURL: CustomStringConvertible {
 /// Uniquely identifies a project that can be used as a dependency.
 public enum Dependency: Hashable {
 	/// A repository hosted on GitHub.com or GitHub Enterprise.
-	case gitHub(Server, Repository)
+	case gitHub(Server, Repository, CartfilePattern)
 
 	/// An arbitrary Git repository.
-	case git(GitURL)
+	case git(GitURL, CartfilePattern)
 
 	/// A binary-only framework
 	case binary(BinaryURL)
@@ -34,10 +34,10 @@ public enum Dependency: Hashable {
 	/// The unique, user-visible name for this project.
 	public var name: String {
 		switch self {
-		case let .gitHub(_, repo):
+		case let .gitHub(_, repo, _):
 			return repo.name
 
-		case let .git(url):
+		case let .git(url, _):
 			return url.name ?? url.urlString
 
 		case let .binary(url):
@@ -53,7 +53,7 @@ public enum Dependency: Hashable {
 }
 
 extension Dependency {
-	fileprivate init(gitURL: GitURL) {
+    fileprivate init(gitURL: GitURL, pattern: CartfilePattern) {
 		let githubHostIdentifier = "github.com"
 		let urlString = gitURL.urlString
 
@@ -73,17 +73,17 @@ extension Dependency {
 
 				switch Repository.fromIdentifier(ownerAndNameSubstring as String) {
 				case .success(let server, let repository):
-					self = Dependency.gitHub(server, repository)
+                    self = Dependency.gitHub(server, repository, pattern)
 
 				default:
-					self = Dependency.git(gitURL)
+                    self = Dependency.git(gitURL, pattern)
 				}
 
 				return
 			}
 		}
 
-		self = Dependency.git(gitURL)
+		self = Dependency.git(gitURL, pattern)
 	}
 }
 
@@ -100,19 +100,19 @@ extension Dependency: Scannable {
 	}
 
 	public static func from(_ scanner: Scanner, base: URL? = nil) -> Result<Dependency, ScannableError> {
-		let parser: (String) -> Result<Dependency, ScannableError>
+		let parser: (String, CartfilePattern) -> Result<Dependency, ScannableError>
 
 		if scanner.scanString("github", into: nil) {
-			parser = { repoIdentifier in
-				return Repository.fromIdentifier(repoIdentifier).map { self.gitHub($0, $1) }
+			parser = { repoIdentifier, pattern in
+				return Repository.fromIdentifier(repoIdentifier).map { self.gitHub($0, $1, pattern) }
 			}
 		} else if scanner.scanString("git", into: nil) {
-			parser = { urlString in
+			parser = { urlString, pattern in
 
-				return .success(Dependency(gitURL: GitURL(urlString)))
+                return .success(Dependency(gitURL: GitURL(urlString), pattern: pattern))
 			}
 		} else if scanner.scanString("binary", into: nil) {
-			parser = { urlString in
+			parser = { urlString, _ in
 				if let url = URL(string: urlString) {
 					if url.scheme == "https" || url.scheme == "file" {
 						return .success(self.binary(BinaryURL(url: url, resolvedDescription: url.description)))
@@ -137,23 +137,29 @@ extension Dependency: Scannable {
 			return .failure(ScannableError(message: "expected string after dependency type", currentLine: scanner.currentLine))
 		}
 
-		var address: NSString?
-		if !scanner.scanUpTo("\"", into: &address) || !scanner.scanString("\"", into: nil) {
+		var parsedAddress: NSString?
+		if !scanner.scanUpTo("\"", into: &parsedAddress) || !scanner.scanString("\"", into: nil) {
 			return .failure(ScannableError(message: "empty or unterminated string after dependency type", currentLine: scanner.currentLine))
 		}
-
-		if let address = address {
-			return parser(address as String)
-		} else {
-			return .failure(ScannableError(message: "empty string after dependency type", currentLine: scanner.currentLine))
-		}
+        
+        var pattern: NSString?
+        if scanner.scanString("cartfile:\"", into: nil) {
+            if !scanner.scanUpTo("\"", into: &pattern) || !scanner.scanString("\"", into: nil) {
+                return .failure(ScannableError(message: "empty or unterminated cartfile definition", currentLine: scanner.currentLine))
+            }
+        }
+        
+        guard let address = parsedAddress else {
+            return .failure(ScannableError(message: "empty string after dependency type", currentLine: scanner.currentLine))
+        }
+        return parser(address as String, (pattern as String?) ?? Constants.Project.cartfilePath1)
 	}
 }
 
 extension Dependency: CustomStringConvertible {
 	public var description: String {
 		switch self {
-		case let .gitHub(server, repo):
+		case let .gitHub(server, repo, pattern):
 			let repoDescription: String
 			switch server {
 			case .dotCom:
@@ -162,10 +168,10 @@ extension Dependency: CustomStringConvertible {
 			case .enterprise:
 				repoDescription = "\(server.url(for: repo))"
 			}
-			return "github \"\(repoDescription)\""
+            return "github \"\(repoDescription)\" cartfile:\"\(pattern)\""
 
-		case let .git(url):
-			return "git \"\(url)\""
+		case let .git(url, pattern):
+            return "git \"\(url)\" cartfile:\"\(pattern)\""
 
 		case let .binary(binary):
 			return "binary \"\(binary)\""
@@ -177,16 +183,15 @@ extension Dependency {
 	/// Returns the URL that the dependency's remote repository exists at.
 	func gitURL(preferHTTPS: Bool) -> GitURL? {
 		switch self {
-		case let .gitHub(server, repository):
+		case let .gitHub(server, repository, _):
 			if preferHTTPS {
 				return server.httpsURL(for: repository)
 			} else {
 				return server.sshURL(for: repository)
 			}
 
-		case let .git(url):
+		case let .git(url, _):
 			return url
-
 		case .binary:
 			return nil
 		}

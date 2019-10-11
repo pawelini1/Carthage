@@ -9,11 +9,13 @@ import Curry
 public struct FetchCommand: CommandProtocol {
 	public struct Options: OptionsProtocol {
 		public let colorOptions: ColorOptions
+        public let pattern: CartfilePattern
 		public let repositoryURL: GitURL
 
 		public static func evaluate(_ mode: CommandMode) -> Result<Options, CommandantError<CarthageError>> {
 			return curry(Options.init)
 				<*> ColorOptions.evaluate(mode)
+                <*> mode <| Option(key: "cartfile", defaultValue: Constants.Project.cartfilePath1, usage: "the directory containing the Carthage project")
 				<*> mode <| Argument(usage: "the Git repository that should be cloned or fetched")
 		}
 	}
@@ -22,7 +24,7 @@ public struct FetchCommand: CommandProtocol {
 	public let function = "Clones or fetches a Git repository ahead of time"
 
 	public func run(_ options: Options) -> Result<(), CarthageError> {
-		let dependency = Dependency.git(options.repositoryURL)
+        let dependency = Dependency.git(options.repositoryURL, options.pattern)
 		var eventSink = ProjectEventSink(colorOptions: options.colorOptions)
 
 		return cloneOrFetch(dependency: dependency, preferHTTPS: true)

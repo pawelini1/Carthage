@@ -282,7 +282,7 @@ extension CarthageError: CustomStringConvertible {
 			}
 
 			switch dependency {
-			case let .gitHub(server, repository):
+			case let .gitHub(server, repository, _):
 				description += "\n\nIf you believe this to be an error, please file an issue with the maintainers at \(server.newIssueURL(for: repository).absoluteString)"
 
 			case .git, .binary:

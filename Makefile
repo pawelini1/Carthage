@@ -6,7 +6,7 @@ PREFIX?=/usr/local
 INTERNAL_PACKAGE=CarthageApp.pkg
 OUTPUT_PACKAGE=Carthage.pkg
 
-CARTHAGE_EXECUTABLE=./.build/release/carthage
+CARTHAGE_EXECUTABLE=./.build/release/gpcarthage
 BINARIES_FOLDER=/usr/local/bin
 
 SWIFT_BUILD_FLAGS=--configuration release -Xswiftc -suppress-warnings
@@ -75,7 +75,7 @@ install: installables
 	$(SUDO) $(CP) -f "$(CARTHAGE_EXECUTABLE)" "$(BINARIES_FOLDER)"
 
 uninstall:
-	$(RM) "$(BINARIES_FOLDER)/carthage"
+	$(RM) "$(BINARIES_FOLDER)/gpcarthage"
 	
 xcodeproj:
 	 swift package generate-xcodeproj
