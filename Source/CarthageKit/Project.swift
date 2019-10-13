@@ -6,6 +6,8 @@ import ReactiveSwift
 import Tentacle
 import XCDBLD
 import ReactiveTask
+import Commandant
+import Curry
 
 /// Describes an event occurring to or with a project.
 public enum ProjectEvent {
@@ -82,29 +84,62 @@ extension ProjectEvent: Equatable {
 	}
 }
 
-public typealias CartfilePattern = String
+public struct ProjectOptions: Equatable, Hashable, OptionsProtocol {
+    public var cartfile: String
+    public var schemes: [String]?
+    
+    public static func evaluate(_ mode: CommandMode) -> Result<ProjectOptions, CommandantError<CarthageError>> {
+        return curry(ProjectOptions.init)
+            <*> mode <| Option(key: "cartfile", defaultValue: Constants.Project.defaultOptions.cartfile, usage: "cartfile to use")
+            <*> (mode <| Option(key: "schemes", defaultValue: Constants.Project.defaultOptions.cartfile, usage: "cartfile to use")).map { $0.components(separatedBy: CharacterSet.whitespaces) }
 
-extension CartfilePattern {
-    public func privateCartfilePath() -> String { return "\(self).private" }
-    public func resolvedCartfilePath() -> String { return "\(self).resolved" }
+    }
 }
 
-extension CartfilePattern: Scannable {
-    public static func from(_ scanner: Scanner) -> Result<CartfilePattern, ScannableError> {
-        if !scanner.scanString("cartfile:\"", into: nil) {
-            return .success(Constants.Project.cartfilePath1)
+extension ProjectOptions: CustomStringConvertible {
+    public var description: String {
+        return ["cartfile:\"\(cartfile)\"", schemes.flatMap {"schemes:\"\($0.joined(separator: " "))\""}]
+            .compactMap { $0 }
+            .joined(separator: " ")
+    }
+}
+
+extension ProjectOptions {
+    public func privateCartfilePath() -> String { return "\(cartfile).private" }
+    public func resolvedCartfilePath() -> String { return "\(cartfile).resolved" }
+}
+
+extension ProjectOptions: Scannable {
+    public static func from(_ scanner: Scanner) -> Result<ProjectOptions, ScannableError> {
+        var projectOptions = Constants.Project.defaultOptions
+        let currentScanLocation = scanner.scanLocation
+        var postCartfileLocation = 0
+        var postSchemesLocation = 0
+        
+        var parsedCartfile: NSString?
+        if scanner.scanString("cartfile:\"", into: nil) {
+            if !scanner.scanUpTo("\"", into: &parsedCartfile) || !scanner.scanString("\"", into: nil) {
+                return .failure(ScannableError(message: "empty or unterminated cartfile definition", currentLine: scanner.currentLine))
+            }
+            projectOptions.cartfile = parsedCartfile! as String
+            postCartfileLocation = scanner.scanLocation
+//            scanner.scanLocation = currentScanLocation
         }
         
-        var pattern: NSString?
-        if !scanner.scanUpTo("\"", into: &pattern) || pattern == nil {
-            return .failure(ScannableError(message: "empty cartfile name", currentLine: scanner.currentLine))
+        var parsedSchemes: NSString?
+        if scanner.scanString("schemes:\"", into: nil) {
+            if !scanner.scanUpTo("\"", into: &parsedSchemes) || !scanner.scanString("\"", into: nil) {
+                return .failure(ScannableError(message: "empty or unterminated schemes definition", currentLine: scanner.currentLine))
+            }
+            guard let schemes = parsedSchemes?.components(separatedBy: CharacterSet.whitespaces), schemes.count > 0 else {
+                return .failure(ScannableError(message: "empty schemes definition", currentLine: scanner.currentLine))
+            }
+            projectOptions.schemes = schemes
+            postSchemesLocation = scanner.scanLocation
         }
         
-        if !scanner.scanString("\"", into: nil) {
-            return .failure(ScannableError(message: "unterminated cartfile name", currentLine: scanner.currentLine))
-        }
-        
-        return .success(self.init(pattern! as String))
+        scanner.scanLocation = max(currentScanLocation, max(postCartfileLocation, postSchemesLocation))
+        return .success(projectOptions)
     }
 }
 
@@ -113,7 +148,7 @@ public final class Project { // swiftlint:disable:this type_body_length
 	/// File URL to the root directory of the project.
 	public let directoryURL: URL
     
-    public let pattern: CartfilePattern
+    public let options: ProjectOptions
 
 	/// Whether to prefer HTTPS for cloning (vs. SSH).
 	public var preferHTTPS = true
@@ -127,7 +162,7 @@ public final class Project { // swiftlint:disable:this type_body_length
 	public let projectEvents: Signal<ProjectEvent, NoError>
 	private let _projectEventsObserver: Signal<ProjectEvent, NoError>.Observer
 
-	public init(directoryURL: URL, pattern: CartfilePattern) {
+	public init(directoryURL: URL, options: ProjectOptions) {
 		precondition(directoryURL.isFileURL)
 
 		let (signal, observer) = Signal<ProjectEvent, NoError>.pipe()
@@ -135,7 +170,7 @@ public final class Project { // swiftlint:disable:this type_body_length
 		_projectEventsObserver = observer
 
 		self.directoryURL = directoryURL
-        self.pattern = pattern
+        self.options = options
 	}
 
 	private typealias CachedVersions = [Dependency: [PinnedVersion]]
@@ -155,17 +190,17 @@ public final class Project { // swiftlint:disable:this type_body_length
 
     /// The file URL to the project's Cartfile.
     public var cartfileURL: URL {
-        return directoryURL.appendingPathComponent(pattern, isDirectory: false)
+        return directoryURL.appendingPathComponent(options.cartfile, isDirectory: false)
     }
     
     /// The file URL to the project's Cartfile.resolved.
     public var resolvedCartfileURL: URL {
-        return directoryURL.appendingPathComponent(pattern.resolvedCartfilePath(), isDirectory: false)
+        return directoryURL.appendingPathComponent(options.resolvedCartfilePath(), isDirectory: false)
     }
     
     /// The file URL to the project's Cartfile.private.
     public var privateCartfileURL: URL {
-        return directoryURL.appendingPathComponent(pattern.privateCartfilePath(), isDirectory: false)
+        return directoryURL.appendingPathComponent(options.privateCartfilePath(), isDirectory: false)
     }
     
 	/// Attempts to load Cartfile or Cartfile.private from the given directory,
@@ -209,12 +244,12 @@ public final class Project { // swiftlint:disable:this type_body_length
 		return SignalProducer.zip(cartfile, privateCartfile)
 			.attemptMap { cartfile, privateCartfile -> Result<Cartfile, CarthageError> in
 				var cartfile = cartfile
-                let pattern = self.pattern
+                let options = self.options
 
 				let duplicateDeps = duplicateDependenciesIn(cartfile, privateCartfile).map { dependency in
 					return DuplicateDependency(
 						dependency: dependency,
-						locations: ["\(pattern)", "\(pattern.privateCartfilePath())"]
+						locations: ["\(options.cartfile)", "\(options.privateCartfilePath())"]
 					)
 				}
 
@@ -353,11 +388,11 @@ public final class Project { // swiftlint:disable:this type_body_length
 		tryCheckoutDirectory: Bool
 	) -> SignalProducer<(Dependency, VersionSpecifier), CarthageError> {
 		switch dependency {
-		case .git, .gitHub:
+		case .git(_, let options), .gitHub(_, _, let options):
 			let revision = version.commitish
 			let cartfileFetch: SignalProducer<Cartfile, CarthageError> = self.cloneOrFetchDependency(dependency, commitish: revision)
 				.flatMap(.concat) { repositoryURL in
-					return contentsOfFileInRepository(repositoryURL, Constants.Project.cartfilePath1, revision: revision)
+					return contentsOfFileInRepository(repositoryURL, options.cartfile, revision: revision)
 				}
 				.flatMapError { _ in .empty }
 				.attemptMap(Cartfile.from(string:))
@@ -371,7 +406,7 @@ public final class Project { // swiftlint:disable:this type_body_length
 				}
 				.flatMap(.concat) { directoryExists -> SignalProducer<Cartfile, CarthageError> in
 					if directoryExists {
-						return SignalProducer(result: Cartfile.from(file: dependencyURL.appendingPathComponent(Constants.Project.cartfilePath1)))
+						return SignalProducer(result: Cartfile.from(file: dependencyURL.appendingPathComponent(options.cartfile)))
 							.flatMapError { _ in .empty }
 					} else {
 						return cartfileFetch
@@ -914,7 +949,7 @@ public final class Project { // swiftlint:disable:this type_body_length
 						submodulesInRepository(repositoryURL, revision: revision)
 							.flatMap(.concat) { (submodule) in
 								return cloneSubmoduleInWorkingDirectory(submodule, workingDirectoryURL, cacheURLMap: { (gitURL: GitURL) in
-                                    let dependency = Dependency.git(gitURL, Constants.Project.cartfilePath1)
+                                    let dependency = Dependency.git(gitURL, Constants.Project.defaultOptions)
 									return repositoryFileURL(for: dependency)
 								})
 							}

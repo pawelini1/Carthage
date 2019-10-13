@@ -318,10 +318,10 @@ public func createVersionFileForCurrentProject(
 
 				// If the reposiroty is not pushed to any remote
 				// the list of remotes is empty, so call the current project... "_Current"
-                return urlOfMostPopularRemote.flatMap { Dependency.git(GitURL($0), Constants.Project.cartfilePath1).name } ?? "_Current"
+                return urlOfMostPopularRemote.flatMap { Dependency.git(GitURL($0), Constants.Project.defaultOptions).name } ?? "_Current"
 			}
 
-            return Dependency.git(GitURL(origin.remoteNameAndURL.url), Constants.Project.cartfilePath1).name
+            return Dependency.git(GitURL(origin.remoteNameAndURL.url), Constants.Project.defaultOptions).name
 		}
 
 	let currentGitTagOrCommitish = launchGitTask(["rev-parse", "HEAD"])

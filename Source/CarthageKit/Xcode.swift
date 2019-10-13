@@ -232,7 +232,7 @@ public func buildableSchemesInDirectory( // swiftlint:disable:this function_body
 			if !schemes.isEmpty {
 				return .init(schemes)
 			} else {
-				return .init(error: .noSharedFrameworkSchemes(.git(GitURL(directoryURL.path), Constants.Project.cartfilePath1), platforms))
+				return .init(error: .noSharedFrameworkSchemes(.git(GitURL(directoryURL.path), Constants.Project.defaultOptions), platforms))
 			}
 		}
 }
@@ -909,7 +909,7 @@ public func buildInDirectory( // swiftlint:disable:this function_body_length
 		buildableSchemesInDirectory(directoryURL,
 									withConfiguration: options.configuration,
                                     forPlatforms: options.platforms,
-                                    forSchemes: options.schemes
+                                    forSchemes: dependency?.dependency.options?.schemes
 			)
 			.flatMap(.concat) { (scheme: Scheme, project: ProjectLocator) -> SignalProducer<TaskEvent<URL>, CarthageError> in
 				let initialValue = (project, scheme)

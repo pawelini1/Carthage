@@ -12,7 +12,7 @@ public struct CleanupCommand: CommandProtocol {
 	public struct Options: OptionsProtocol {
 		public let directoryPath: String
 		public let colorOptions: ColorOptions
-        public let pattern: CartfilePattern
+        public let options: ProjectOptions
 
 		public static func evaluate(_ mode: CommandMode) -> Result<Options, CommandantError<CarthageError>> {
 			return curry(self.init)
@@ -22,12 +22,12 @@ public struct CleanupCommand: CommandProtocol {
 					usage: "the directory containing the Carthage project"
 				)
 				<*> ColorOptions.evaluate(mode)
-                <*> mode <| Option(key: "cartfile", defaultValue: Constants.Project.cartfilePath1, usage: "the directory containing the Carthage project")
+                <*> ProjectOptions.evaluate(mode)
 		}
 
 		public func loadProject() -> Project {
 			let directoryURL = URL(fileURLWithPath: self.directoryPath, isDirectory: true)
-            let project = Project(directoryURL: directoryURL, pattern: pattern)
+            let project = Project(directoryURL: directoryURL, options: options)
 			var eventSink = ProjectEventSink(colorOptions: colorOptions)
 			project.projectEvents.observeValues { eventSink.put($0) }
 			return project

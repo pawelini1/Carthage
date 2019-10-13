@@ -88,7 +88,7 @@ public struct Constants {
 
 	public struct Project {
 		/// The relative path to a project's Cartfile.
-        public static let cartfilePath1: CartfilePattern = "Cartfile"
+        public static let defaultOptions = ProjectOptions(cartfile: "Cartfile", schemes: nil)
         
 		/// The text that needs to exist in a GitHub Release asset's name, for it to be
 		/// tried as a binary framework.

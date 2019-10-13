@@ -6,8 +6,6 @@ public struct BuildOptions {
 	public var configuration: String
 	/// The platforms to build for.
 	public var platforms: Set<Platform>
-    /// The schemes to build for.
-    public var schemes: [String]?
 	/// The toolchain to build with.
 	public var toolchain: String?
 	/// The path to the custom derived data folder.
@@ -23,15 +21,13 @@ public struct BuildOptions {
 		toolchain: String? = nil,
 		derivedDataPath: String? = nil,
 		cacheBuilds: Bool = true,
-		useBinaries: Bool = true,
-        schemes: [String]?
-	) {
+		useBinaries: Bool = true
+    ) {
 		self.configuration = configuration
 		self.platforms = platforms
 		self.toolchain = toolchain
 		self.derivedDataPath = derivedDataPath
 		self.cacheBuilds = cacheBuilds
 		self.useBinaries = useBinaries
-        self.schemes = schemes
 	}
 }

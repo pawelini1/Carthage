@@ -12,14 +12,14 @@ public struct CheckoutCommand: CommandProtocol {
 		public let useSubmodules: Bool
 		public let colorOptions: ColorOptions
 		public let directoryPath: String
-        public let pattern: CartfilePattern
+        public let options: ProjectOptions
 		public let dependenciesToCheckout: [String]?
 
 		private init(useSSH: Bool,
 		             useSubmodules: Bool,
 		             colorOptions: ColorOptions,
 		             directoryPath: String,
-                     pattern: CartfilePattern,
+                     options: ProjectOptions,
                      dependenciesToCheckout: [String]?
 		) {
 			self.useSSH = useSSH
@@ -27,7 +27,7 @@ public struct CheckoutCommand: CommandProtocol {
 			self.colorOptions = colorOptions
 			self.directoryPath = directoryPath
 			self.dependenciesToCheckout = dependenciesToCheckout
-            self.pattern = pattern
+            self.options = options
 		}
 
 		public static func evaluate(_ mode: CommandMode) -> Result<Options, CommandantError<CarthageError>> {
@@ -40,7 +40,7 @@ public struct CheckoutCommand: CommandProtocol {
 				<*> mode <| Option(key: "use-submodules", defaultValue: false, usage: "add dependencies as Git submodules")
 				<*> ColorOptions.evaluate(mode)
 				<*> mode <| Option(key: "project-directory", defaultValue: FileManager.default.currentDirectoryPath, usage: "the directory containing the Carthage project")
-                <*> mode <| Option(key: "cartfile", defaultValue: Constants.Project.cartfilePath1, usage: "the directory containing the Carthage project")
+                <*> ProjectOptions.evaluate(mode)
 				<*> (mode <| Argument(defaultValue: [], usage: dependenciesUsage, usageParameter: "dependency names")).map { $0.isEmpty ? nil : $0 }
 		}
 
@@ -48,7 +48,7 @@ public struct CheckoutCommand: CommandProtocol {
 		/// accordingly.
         public func loadProject() -> SignalProducer<Project, CarthageError> {
 			let directoryURL = URL(fileURLWithPath: self.directoryPath, isDirectory: true)
-            let project = Project(directoryURL: directoryURL, pattern: pattern)
+            let project = Project(directoryURL: directoryURL, options: options)
 			project.preferHTTPS = !self.useSSH
 			project.useSubmodules = self.useSubmodules
 
