@@ -98,7 +98,10 @@ public struct ProjectOptions: Equatable, Hashable, OptionsProtocol {
 
 extension ProjectOptions: CustomStringConvertible {
     public var description: String {
-        return ["cartfile:\"\(cartfile)\"", schemes.flatMap {"schemes:\"\($0.joined(separator: " "))\""}]
+        return [
+            cartfile != Constants.Project.defaultOptions.cartfile ? "cartfile:\"\(cartfile)\"" : nil,
+            schemes.flatMap {"schemes:\"\($0.joined(separator: " "))\""}
+            ]
             .compactMap { $0 }
             .joined(separator: " ")
     }
@@ -117,17 +120,17 @@ extension ProjectOptions: Scannable {
         var postSchemesLocation = 0
         
         var parsedCartfile: NSString?
-        if scanner.scanString("cartfile:\"", into: nil) {
+        if scanner.scanPastTo("cartfile:\"") {
             if !scanner.scanUpTo("\"", into: &parsedCartfile) || !scanner.scanString("\"", into: nil) {
                 return .failure(ScannableError(message: "empty or unterminated cartfile definition", currentLine: scanner.currentLine))
             }
             projectOptions.cartfile = parsedCartfile! as String
             postCartfileLocation = scanner.scanLocation
-//            scanner.scanLocation = currentScanLocation
+            scanner.scanLocation = currentScanLocation
         }
         
         var parsedSchemes: NSString?
-        if scanner.scanString("schemes:\"", into: nil) {
+        if scanner.scanPastTo("schemes:\"") {
             if !scanner.scanUpTo("\"", into: &parsedSchemes) || !scanner.scanString("\"", into: nil) {
                 return .failure(ScannableError(message: "empty or unterminated schemes definition", currentLine: scanner.currentLine))
             }

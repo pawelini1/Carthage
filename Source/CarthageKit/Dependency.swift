@@ -170,18 +170,21 @@ extension Dependency: CustomStringConvertible {
 		switch self {
 		case let .gitHub(server, repo, options):
 			let repoDescription: String
+            let optionsString = options != Constants.Project.defaultOptions ? options.description : nil
 			switch server {
 			case .dotCom:
-				repoDescription = "\(repo.owner)/\(repo.name)"
-
+				repoDescription = "\"\(repo.owner)/\(repo.name)\""
 			case .enterprise:
-				repoDescription = "\(server.url(for: repo))"
+				repoDescription = "\"\(server.url(for: repo))\""
 			}
-            return "github \"\(repoDescription)\" \(options.description)"
-
+            return ["github", repoDescription, optionsString]
+                .compactMap { $0 }
+                .joined(separator: " ")
 		case let .git(url, options):
-            return "git \"\(url)\" \(options.description)"
-
+            let optionsString = options != Constants.Project.defaultOptions ? options.description : nil
+            return ["git", "\"\(url)\"", optionsString]
+                .compactMap { $0 }
+                .joined(separator: " ")
 		case let .binary(binary):
 			return "binary \"\(binary)\""
 		}

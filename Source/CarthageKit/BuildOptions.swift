@@ -22,7 +22,7 @@ public struct BuildOptions {
 		derivedDataPath: String? = nil,
 		cacheBuilds: Bool = true,
 		useBinaries: Bool = true
-    ) {
+	) {
 		self.configuration = configuration
 		self.platforms = platforms
 		self.toolchain = toolchain
