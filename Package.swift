@@ -6,7 +6,7 @@ let package = Package(
     products: [
         .library(name: "XCDBLD", targets: ["XCDBLD"]),
         .library(name: "CarthageKit", targets: ["CarthageKit"]),
-        .executable(name: "gpcarthage", targets: ["carthage"]),
+        .executable(name: "carthage+", targets: ["carthage"]),
     ],
     dependencies: [
         .package(url: "https://github.com/antitypical/Result.git", from: "4.1.0"),
