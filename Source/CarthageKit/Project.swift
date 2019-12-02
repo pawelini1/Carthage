@@ -120,7 +120,7 @@ extension ProjectOptions: Scannable {
         var postSchemesLocation = 0
         
         var parsedCartfile: NSString?
-        if scanner.scanPastTo("cartfile:\"") {
+        if scanner.currentLine.contains("cartfile:\"") && scanner.scanPastTo("cartfile:\"") {
             if !scanner.scanUpTo("\"", into: &parsedCartfile) || !scanner.scanString("\"", into: nil) {
                 return .failure(ScannableError(message: "empty or unterminated cartfile definition", currentLine: scanner.currentLine))
             }
@@ -130,7 +130,7 @@ extension ProjectOptions: Scannable {
         }
         
         var parsedSchemes: NSString?
-        if scanner.scanPastTo("schemes:\"") {
+        if scanner.currentLine.contains("schemes:\"") && scanner.scanPastTo("schemes:\"") {
             if !scanner.scanUpTo("\"", into: &parsedSchemes) || !scanner.scanString("\"", into: nil) {
                 return .failure(ScannableError(message: "empty or unterminated schemes definition", currentLine: scanner.currentLine))
             }
